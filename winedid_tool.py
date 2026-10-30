@@ -1097,8 +1097,9 @@ class ModernEDIDApp(tk.Tk):
         ("3440 × 1440 @ 60Hz (21:9 带鱼屏)", 3440, 1440, 60),
     ]
 
-    def __init__(self):
+    def __init__(self, license_details=None):
         super().__init__()
+        self.license_details = license_details or {}
         self.title("WinEDID Tool v3.2 - 显卡诱骗与分辨率原生管理工具")
 
         # 现代暗黑极简配色规范
@@ -1192,6 +1193,15 @@ class ModernEDIDApp(tk.Tk):
         # 权限与刷新按钮区
         top_right = tk.Frame(header, bg=self.COLOR_BG)
         top_right.pack(side=tk.RIGHT)
+
+        # 商业授权状态
+        lic_str = self.license_details.get("remaining_days", "已授权")
+        self.btn_lic = tk.Button(
+            top_right, text=f"🔑 授权: {lic_str}", bg="#1e293b", fg="#38bdf8",
+            font=("Segoe UI", 8, "bold"), relief=tk.FLAT, padx=7, pady=2,
+            cursor="hand2", command=self.show_license_info
+        )
+        self.btn_lic.pack(side=tk.LEFT, padx=(0, 6))
 
         admin = is_admin()
         perm_text = "🛡️ 已提权" if admin else "⚠️ 点击提权"
@@ -2179,9 +2189,31 @@ class ModernEDIDApp(tk.Tk):
             self.log(f"导入失败: {e}", "ERROR")
             messagebox.showerror("错误", str(e))
 
+    def show_license_info(self):
+        """查看商业授权详情或续期激活"""
+        try:
+            from license_dialog import LicenseActivationDialog
+            from license_guard import license_guard
+            _, status, details = license_guard.check_license()
+            dlg = LicenseActivationDialog(status_code=status, details=details)
+            success = dlg.show()
+            _, _, new_details = license_guard.check_license()
+            self.license_details = new_details
+            lic_str = new_details.get("remaining_days", "已授权")
+            self.btn_lic.config(text=f"🔑 授权: {lic_str}")
+        except Exception as e:
+            messagebox.showinfo("授权信息", f"商业授权状态: {self.license_details.get('remaining_days', '有效')}")
+
 
 def main():
-    app = ModernEDIDApp()
+    lic_details = {}
+    try:
+        from license_dialog import require_license_or_dialog
+        _, lic_details = require_license_or_dialog()
+    except Exception as e:
+        print("License guard:", e)
+
+    app = ModernEDIDApp(license_details=lic_details)
     app.mainloop()
 
 

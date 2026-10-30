@@ -1,0 +1,83 @@
+name: WinEDID Tool CI/CD - Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build WinEDID_Tool.exe
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pywin32
+
+      - name: Build WinEDID_Tool.exe with PyInstaller
+        run: |
+          pyinstaller WinEDID_Tool.spec --noconfirm --clean
+
+      - name: Verify Build Output
+        shell: pwsh
+        run: |
+          if (Test-Path "dist\WinEDID_Tool.exe") {
+            $item = Get-Item "dist\WinEDID_Tool.exe"
+            Write-Host "[√] Successfully built: $($item.FullName) ($([math]::Round($item.Length / 1MB, 2)) MB)"
+          } else {
+            Write-Error "[x] Build failed: dist\WinEDID_Tool.exe not found!"
+            exit 1
+          }
+
+      - name: Upload WinEDID_Tool Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinEDID_Tool-x64
+          path: dist/WinEDID_Tool.exe
+          if-no-files-found: error
+
+      - name: Update latest tag
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        shell: pwsh
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f latest
+          git push -f origin latest
+
+      - name: Release WinEDID_Tool.exe to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: latest
+          name: "WinEDID Tool v3.2 商业加密版 (${{ github.sha }})"
+          body: |
+            ## ⚡ WinEDID Tool 显卡诱骗与虚拟显示器管理工具 (云端自动构建)
+            - **Commit**: `${{ github.sha }}`
+            - **分支**: `${{ github.ref_name }}`
+            - **构建环境**: GitHub Actions (`windows-latest` / Python 3.11)
+            - **授权保护**: 已集成国文创商业授权加密体系 (一机一码 / 防二次激活 / 支持国文创加密机离线签发)
+            - **下载说明**: 直接点击下方 `WinEDID_Tool.exe` 即可在 Windows 上免安装直接运行。
+          files: dist/WinEDID_Tool.exe
+          draft: false
+          prerelease: false
